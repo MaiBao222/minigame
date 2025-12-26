@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Game Xếp Hình (15-puzzle)</title>
+  <style>
+    :root{
+      --size: 4; /* số ô mỗi hàng */
+      --tile-gap: 6px;
+      --board-size: min(90vmin, 600px);
+      --tile-radius: 8px;
+    }
+    body{
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      min-height:100vh;
+      margin:0;
+      background: linear-gradient(180deg,#f8fafc,#e6eef8);
+      color:#0b1220;
+      padding:20px;
+    }
+    .container{
+      width:100%;
+      max-width: calc(var(--board-size) + 240px);
+      display:flex;
+      gap:20px;
+      align-items:flex-start;
+      justify-content:center;
+      flex-wrap:wrap;
+    }
+    .board-wrap{
+      width:var(--board-size);
+    }
+    .board{
+      width:100%;
+      aspect-ratio: 1 / 1;
+      background:#cfe0ff;
+      padding:var(--tile-gap);
+      box-sizing:border-box;
+      display:grid;
+      grid-template-columns: repeat(var(--size), 1fr);
+      gap:var(--tile-gap);
+      border-radius:12px;
+      box-shadow: 0 8px 18px rgba(10,20,40,0.12);
+    }
+    .tile{
+      background: #fff;
+      border-radius: var(--tile-radius);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:700;
+      font-size: clamp(18px, 2.2vmin, 28px);
+      color:#0b1220;
+      cursor:pointer;
+      user-select:none;
+      box-shadow: 0 4px 6px rgba(10,20,40,0.08);
+      transition: transform 180ms ease, box-shadow 180ms;
+    }
+    .tile:active{ transform: scale(.98); box-shadow: 0 2px 4px rgba(10,20,40,0.06); }
+    .tile.empty{
+      background: transparent;
+      box-shadow: none;
+      cursor: default;
+    }
+
+    /* Image mode: nếu bạn muốn dùng ảnh, sửa URL trong .board style attribute (background-image) */
+    .controls{
+      width:220px;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+      align-items:stretch;
+    }
+    .controls .card{
+      background:#fff;
+      padding:12px;
+      border-radius:10px;
+      box-shadow: 0 6px 14px rgba(10,20,40,0.06);
+    }
+    button{
+      background:#2563eb;
+      color:white;
+      border:0;
+      padding:10px 12px;
+      border-radius:8px;
+      font-weight:600;
+      cursor:pointer;
+    }
+    button.secondary{
+      background:#6b7280;
+    }
+    .info-row{
+      display:flex;
+      gap:8px;
+      justify-content:space-between;
+      align-items:center;
+      font-size:14px;
+    }
+    .small{
+      font-size:13px;
+      color:#334155;
+    }
+    .win-overlay{
+      position:absolute;
+      inset:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .win-box{
+      background:rgba(255,255,255,0.98);
+      padding:18px 20px;
+      border-radius:12px;
+      text-align:center;
+      box-shadow: 0 8px 30px rgba(10,20,40,0.12);
+    }
+
+    @media (max-width:880px){
+      .container{ flex-direction:column; align-items:center; }
+      .controls{ width:100%; max-width:480px; order:2; }
+      .board-wrap{ order:1; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="board-wrap" style="position:relative;">
+      <div id="board" class="board" data-size="4"
+           title="Nhấp vào ô cạnh ô trống để di chuyển">
+        <!-- ô sẽ được tạo bằng JS -->
+      </div>
+      <div id="win" class="win-overlay" style="display:none; pointer-events:none;">
+        <div class="win-box">
+          <h2>Chúc mừng! Bạn đã xếp đúng 🎉</h2>
+          <div id="win-stats" class="small"></div>
+          <div style="margin-top:10px;">
+            <button id="play-again">Chơi lại</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <h3 style="margin:0">Game Xếp Hình</h3>
+          <div class="small">4x4</div>
+        </div>
+        <p class="small" style="margin:8px 0 0 0">Mục tiêu: ghép các ô về đúng vị trí. Chỉ có thể di chuyển ô cạnh ô trống.</p>
+      </div>
+
+      <div class="card">
+        <div class="info-row">
+          <div>
+            <div class="small">Bước</div>
+            <div id="moves" style="font-weight:700">0</div>
+          </div>
+          <div>
+            <div class="small">Thời gian</div>
+            <div id="timer" style="font-weight:700">00:00</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button id="shuffle">Shuffle</button>
+          <button id="reset" class="secondary">Reset</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <label class="small">Chế độ hiển thị</label>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <button id="numbers" class="secondary">Số</button>
+          <button id="image-btn">Ảnh</button>
+        </div>
+        <p class="small" style="margin-top:10px">Để dùng ảnh khác, chỉnh URLẢNH trong mã (dòng chú thích trong file).</p>
+      </div>
+
+      <div class="card small">
+        Hướng dẫn nhanh:
+        <ul style="margin:8px 0 0 18px; padding:0">
+          <li>Nhấp ô cạnh ô trống để di chuyển</li>
+          <li>Nhấn Shuffle để trộn — luôn có lời giải</li>
+          <li>Reset đưa về trạng thái ban đầu (đã xếp)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Cấu hình
+    const SIZE = 4; // 4x4
+    const boardEl = document.getElementById('board');
+    const movesEl = document.getElementById('moves');
+    const timerEl = document.getElementById('timer');
+    const shuffleBtn = document.getElementById('shuffle');
+    const resetBtn = document.getElementById('reset');
+    const winEl = document.getElementById('win');
+    const winStats = document.getElementById('win-stats');
+    const playAgain = document.getElementById('play-again');
+    const numbersBtn = document.getElementById('numbers');
+    const imageBtn = document.getElementById('image-btn');
+
+    let tiles = []; // array of numbers 1..15 and 0 for empty
+    let moves = 0;
+    let timer = null;
+    let seconds = 0;
+    let started = false;
+    let useImage = false;
+
+    // Nếu muốn dùng ảnh khác, sửa URL ở đây:
+    const IMAGE_URL = "https://images.unsplash.com/photo-1542281286-9e0a16bb7366?w=1600&q=80&auto=format&fit=crop";
+
+    function initBoard() {
+      boardEl.innerHTML = '';
+      boardEl.style.setProperty('--size', SIZE);
+      boardEl.dataset.size = SIZE;
+      // chiều ảnh nền cho chế độ image:
+      boardEl.style.backgroundImage = useImage ? `url(${IMAGE_URL})` : 'none';
+      if (useImage) {
+        boardEl.style.backgroundSize = `${SIZE * 100}% ${SIZE * 100}%`;
+      } else {
+        boardEl.style.backgroundSize = '';
+      }
+
+      // tạo trạng thái đã xếp (1..N-1, 0)
+      tiles = [];
+      for (let i=1;i<SIZE*SIZE;i++) tiles.push(i);
+      tiles.push(0);
+      render();
+      moves = 0; updateMoves();
+      stopTimer();
+      seconds = 0; updateTimer();
+      hideWin();
+      started = false;
+    }
+
+    function render(){
+      boardEl.innerHTML = '';
+      const n = SIZE*SIZE;
+      for (let i=0;i<n;i++){
+        const val = tiles[i];
+        const tile = document.createElement('div');
+        tile.className = 'tile';
+        if (val === 0) {
+          tile.classList.add('empty');
+          tile.textContent = '';
+        } else {
+          tile.textContent = val;
+        }
+        tile.dataset.index = i;
+        // nếu dùng ảnh: đặt background-position để hiển thị miếng ảnh đúng
+        if (useImage && val !== 0){
+          const row = Math.floor((val - 1) / SIZE);
+          const col = (val - 1) % SIZE;
+          tile.style.backgroundImage = `url(${IMAGE_URL})`;
+          tile.style.backgroundSize = `${SIZE * 100}% ${SIZE * 100}%`;
+          const posX = (col / (SIZE - 1)) * 100;
+          const posY = (row / (SIZE - 1)) * 100;
+          tile.style.backgroundPosition = `${posX}% ${posY}%`;
+          tile.style.color = 'transparent';
+        } else {
+          tile.style.backgroundImage = '';
+          tile.style.color = '';
+        }
+        tile.addEventListener('click', onTileClick);
+        boardEl.appendChild(tile);
+      }
+    }
+
+    function onTileClick(e){
+      const idx = Number(e.currentTarget.dataset.index);
+      const emptyIdx = tiles.indexOf(0);
+      if (canSwap(idx, emptyIdx)){
+        swap(idx, emptyIdx);
+        moves++; updateMoves();
+        if (!started) startTimer();
+        if (checkWin()){
+          onWin();
+        }
+      }
+    }
+
+    function canSwap(i, j){
+      const xi = i % SIZE, yi = Math.floor(i / SIZE);
+      const xj = j % SIZE, yj = Math.floor(j / SIZE);
+      const dx = Math.abs(xi - xj), dy = Math.abs(yi - yj);
+      return (dx + dy) === 1;
+    }
+
+    function swap(i,j){
+      [tiles[i], tiles[j]] = [tiles[j], tiles[i]];
+      render();
+    }
+
+    function shuffle(times = 200){
+      // Trộn bằng các nước đi hợp lệ từ trạng thái solved -> đảm bảo luôn giải được
+      let empty = tiles.indexOf(0);
+      for (let k=0;k<times;k++){
+        const neighbors = [];
+        const x = empty % SIZE, y = Math.floor(empty / SIZE);
+        const tryPos = (nx, ny) => {
+          if (nx>=0 && nx<SIZE && ny>=0 && ny<SIZE) neighbors.push(ny*SIZE + nx);
+        };
+        tryPos(x-1,y); tryPos(x+1,y); tryPos(x,y-1); tryPos(x,y+1);
+        const pick = neighbors[Math.floor(Math.random()*neighbors.length)];
+        swap(pick, empty);
+        empty = pick;
+      }
+      moves = 0; updateMoves();
+      seconds = 0; updateTimer();
+      started = false;
+      hideWin();
+    }
+
+    function updateMoves(){
+      movesEl.textContent = moves;
+    }
+
+    function startTimer(){
+      if (timer) return;
+      started = true;
+      timer = setInterval(()=>{
+        seconds++;
+        updateTimer();
+      }, 1000);
+    }
+    function stopTimer(){
+      if (timer) { clearInterval(timer); timer = null; }
+    }
+    function updateTimer(){
+      const mm = String(Math.floor(seconds/60)).padStart(2,'0');
+      const ss = String(seconds%60).padStart(2,'0');
+      timerEl.textContent = `${mm}:${ss}`;
+    }
+
+    function checkWin(){
+      for (let i=0;i<tiles.length-1;i++){
+        if (tiles[i] !== i+1) return false;
+      }
+      return tiles[tiles.length-1] === 0;
+    }
+
+    function onWin(){
+      stopTimer();
+      showWin();
+    }
+
+    function showWin(){
+      winEl.style.display = 'flex';
+      winEl.style.pointerEvents = 'auto';
+      winStats.textContent = `Bước: ${moves} • Thời gian: ${timerEl.textContent}`;
+    }
+    function hideWin(){
+      winEl.style.display = 'none';
+      winEl.style.pointerEvents = 'none';
+    }
+
+    // nút điều khiển
+    shuffleBtn.addEventListener('click', ()=>{
+      shuffle(300 + Math.floor(Math.random()*200));
+    });
+    resetBtn.addEventListener('click', initBoard);
+    playAgain.addEventListener('click', ()=>{
+      shuffle(250);
+    });
+
+    numbersBtn.addEventListener('click', ()=>{
+      useImage = false;
+      numbersBtn.classList.add('secondary');
+      imageBtn.classList.remove('secondary');
+      initBoard();
+    });
+    imageBtn.addEventListener('click', ()=>{
+      useImage = true;
+      imageBtn.classList.add('secondary');
+      numbersBtn.classList.remove('secondary');
+      initBoard();
+    });
+
+    // Khởi tạo lần đầu
+    (function(){
+      // mặc định là số
+      numbersBtn.classList.add('secondary');
+      imageBtn.classList.remove('secondary');
+      initBoard();
+    })();
+
+    // keyboard support: phím mũi tên để di chuyển ô trống (di chuyển ô kề theo hướng)
+    window.addEventListener('keydown', (e)=>{
+      if (!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) return;
+      e.preventDefault();
+      const empty = tiles.indexOf(0);
+      const x = empty % SIZE, y = Math.floor(empty / SIZE);
+      let target = null;
+      if (e.key === 'ArrowUp') { // muốn di chuyển ô trên xuống ô trống -> swap with below tile
+        if (y < SIZE-1) target = (y+1)*SIZE + x;
+      } else if (e.key === 'ArrowDown'){
+        if (y > 0) target = (y-1)*SIZE + x;
+      } else if (e.key === 'ArrowLeft'){
+        if (x < SIZE-1) target = y*SIZE + (x+1);
+      } else if (e.key === 'ArrowRight'){
+        if (x > 0) target = y*SIZE + (x-1);
+      }
+      if (target !== null){
+        swap(target, empty);
+        moves++; updateMoves();
+        if (!started) startTimer();
+        if (checkWin()) onWin();
+      }
+    });
+
+  </script>
+</body>
+</html>
